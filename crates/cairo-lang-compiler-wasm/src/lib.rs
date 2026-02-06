@@ -103,3 +103,28 @@ fn embedded_corelib_files() -> BTreeMap<String, String> {
         .map(|(path, content)| ((*path).to_string(), (*content).to_string()))
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Value, json};
+
+    use super::compile;
+
+    #[test]
+    fn compile_executable_program() {
+        let request = json!({
+            "crate_name": "test",
+            "files": {
+                "lib.cairo": "#[executable]\nfn main() { println!(\"Hello executable\"); }"
+            },
+            "replace_ids": true
+        });
+
+        let response = compile(&request.to_string());
+        let response_json: Value = serde_json::from_str(&response).expect("valid JSON response");
+
+        assert_eq!(response_json["success"], true, "response={response}");
+        assert_eq!(response_json["error"], Value::Null);
+        assert!(response_json["sierra"].is_string());
+    }
+}

@@ -497,6 +497,7 @@ dependencies = [
  "anyhow",
  "cairo-lang-defs",
  "cairo-lang-diagnostics",
+ "cairo-lang-executable-plugin",
  "cairo-lang-filesystem",
  "cairo-lang-lowering",
  "cairo-lang-parser",

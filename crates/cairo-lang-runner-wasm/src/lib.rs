@@ -293,4 +293,23 @@ mod tests {
         assert_eq!(response_json["error"], Value::Null);
         assert_eq!(response_json["stdout"], "Hello World\n");
     }
+
+    #[test]
+    fn compile_and_run_executable_hello_world() {
+        let request = json!({
+            "crate_name": "test",
+            "files": {
+                "lib.cairo": "#[executable]\nfn main() { println!(\"Hello executable\"); }"
+            },
+            "available_gas": 1000000
+        });
+
+        let response = compile_and_run(&request.to_string());
+        let response_json: Value = serde_json::from_str(&response).expect("valid JSON response");
+
+        assert_eq!(response_json["success"], true, "response={response}");
+        assert_eq!(response_json["panicked"], false);
+        assert_eq!(response_json["error"], Value::Null);
+        assert_eq!(response_json["stdout"], "Hello executable\n");
+    }
 }

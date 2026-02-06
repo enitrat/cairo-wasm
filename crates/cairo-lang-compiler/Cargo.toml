@@ -10,6 +10,7 @@ description = "Cairo compiler."
 anyhow.workspace = true
 cairo-lang-defs = { path = "../cairo-lang-defs", version = "=2.15.0" }
 cairo-lang-diagnostics = { path = "../cairo-lang-diagnostics", version = "=2.15.0" }
+cairo-lang-executable-plugin = { path = "../cairo-lang-executable-plugin", version = "=2.15.0" }
 cairo-lang-filesystem = { path = "../cairo-lang-filesystem", version = "=2.15.0" }
 cairo-lang-lowering = { path = "../cairo-lang-lowering", version = "=2.15.0" }
 cairo-lang-parser = { path = "../cairo-lang-parser", version = "=2.15.0" }

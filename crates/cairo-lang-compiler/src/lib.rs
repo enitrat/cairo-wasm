@@ -8,6 +8,7 @@ use std::sync::Mutex;
 use ::cairo_lang_diagnostics::ToOption;
 use anyhow::{Context, Result};
 use cairo_lang_defs::db::DefsGroup;
+use cairo_lang_executable_plugin::executable_plugin_suite;
 use cairo_lang_filesystem::ids::{CrateId, CrateInput};
 use cairo_lang_lowering::db::LoweringGroup;
 use cairo_lang_lowering::ids::ConcreteFunctionWithBodyId;
@@ -129,6 +130,7 @@ pub fn compile_in_memory_project(
         .with_optimizations(Optimizations::enabled_with_default_movable_functions(
             inlining_strategy,
         ))
+        .with_default_plugin_suite(executable_plugin_suite())
         .build()?;
     let main_crate_ids = setup_in_memory_project(&mut db, project)?;
     compile_prepared_db_program(
