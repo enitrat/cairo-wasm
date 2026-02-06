@@ -1,141 +1,147 @@
-<div align="center">
-  <h1>Cairo 🐺 </h1>
-  <h2> ⚡ Blazing ⚡ fast ⚡ compiler for Cairo, written in 🦀 Rust 🦀 </h2>
-  <img src="./resources/img/cairo-logo-square.png" height="200" width="200">
-  <br />
-  <a href="https://github.com/starkware-libs/cairo/issues/new?assignees=&labels=bug&template=01_BUG_REPORT.md&title=bug%3A+">Report a Bug</a>
-  -
-  <a href="https://github.com/starkware-libs/cairo/issues/new?assignees=&labels=enhancement&template=02_FEATURE_REQUEST.md&title=feat%3A+">Request a Feature</a>
-  -
-  <a href="https://github.com/starkware-libs/cairo/discussions">Ask a Question</a>
-</div>
+# Cairo WASM Integration Guide
 
-<div align="center">
-<br />
+## 1. Consumer-Facing Integration Instructions
 
-[![GitHub Workflow Status](https://github.com/starkware-libs/cairo/actions/workflows/ci.yml/badge.svg)](https://github.com/starkware-libs/cairo/actions/workflows/ci.yml)
-[![Project license](https://img.shields.io/github/license/starkware-libs/cairo.svg?style=flat-square)](LICENSE)
-[![Releases](https://img.shields.io/github/v/release/starkware-libs/cairo)](https://github.com/starkware-libs/cairo/releases)
-[![Pull Requests welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg?style=flat-square)](https://github.com/starkware-libs/cairo/blob/main/docs/CONTRIBUTING.md)
+This branch exposes two browser-oriented WASM crates:
 
-</div>
+- `crates/cairo-lang-compiler-wasm`: compile Cairo source to Sierra in-memory.
+- `crates/cairo-lang-runner-wasm`: compile and run Cairo source (or run Sierra) in-memory.
 
-<details open="open">
-<summary>Table of Contents</summary>
+### Build the WASM packages
 
-- [About](#about)
-- [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [Compiling and running Cairo files](#compiling-and-running-cairo-files)
-  - [Compiling Starknet Contracts](#compiling-starknet-contracts)
-- [Roadmap](#roadmap)
-- [Support](#support)
-- [Project assistance](#project-assistance)
-- [Contributing](#contributing)
-- [Authors \& contributors](#authors--contributors)
-- [Security](#security)
-- [License](#license)
+From the repository root:
 
-</details>
-
----
-
-## About
-
-**[Cairo](https://cairo-lang.org/)** is the first Turing-complete language for creating provable programs for general computation.
-
-## Getting Started
-
-### Prerequisites
-
-- Install [Rust](https://www.rust-lang.org/tools/install)
-- Set up Rust:
 ```bash
-rustup override set stable && rustup update
+wasm-pack build crates/cairo-lang-compiler-wasm --target web --release
+wasm-pack build crates/cairo-lang-runner-wasm --target web --release
 ```
 
-Ensure Rust was installed correctly by running the following from the root project directory:
-```bash
-cargo test
+This generates JS/WASM artifacts under:
+
+- `crates/cairo-lang-compiler-wasm/pkg`
+- `crates/cairo-lang-runner-wasm/pkg`
+
+### API surface
+
+`cairo-lang-compiler-wasm` exports:
+
+- `compile(requestJson: string): string`
+- `embedded_corelib_manifest(): string`
+
+`cairo-lang-runner-wasm` exports:
+
+- `compile_and_run(requestJson: string): string`
+- `run_sierra(requestJson: string): string`
+- `embedded_corelib_manifest(): string`
+
+All functions accept JSON strings and return JSON strings.
+
+### Request/response schema (compiler)
+
+Compile request:
+
+```json
+{
+  "crate_name": "app",
+  "files": {
+    "lib.cairo": "fn main() -> felt252 { 7 }"
+  },
+  "corelib_files": null,
+  "replace_ids": true,
+  "inlining_strategy": "default"
+}
 ```
 
-### Compiling and running Cairo files
+Compile response:
 
-Compile Cairo to Sierra:
-```bash
-cargo run --bin cairo-compile -- --single-file /path/to/input.cairo /path/to/output.sierra --replace-ids
+```json
+{
+  "success": true,
+  "sierra": "...",
+  "diagnostics": "",
+  "error": null
+}
 ```
 
-Compile Sierra to casm (Cairo assembly):
-```bash
-cargo run --bin sierra-compile -- /path/to/input.sierra /path/to/output.casm
+### Request/response schema (runner)
+
+Compile+run request:
+
+```json
+{
+  "crate_name": "app",
+  "files": {
+    "lib.cairo": "fn main(){ println!(\"Hello World\"); }"
+  },
+  "available_gas": 1000000,
+  "function": "::main"
+}
 ```
 
-Run Cairo code directly:
-```bash
-cargo run --bin cairo-run -- --single-file /path/to/file.cairo
+Run response:
+
+```json
+{
+  "success": true,
+  "panicked": false,
+  "values": [],
+  "stdout": "Hello World\n",
+  "gas_counter": "999000",
+  "diagnostics": "",
+  "error": null
+}
 ```
 
-See more information [here](./crates/cairo-lang-runner/README.md). You can also find Cairo examples in the [examples](./examples) directory.
+Notes:
 
-For running tests specifically, see here: [cairo-test](./crates/cairo-lang-test-runner/README.md)
+- `available_gas` is required for programs that use gas accounting.
+- `function` defaults to `::main`.
+- `corelib_files` is optional. If omitted, embedded corelib files are used.
+- In runner compile+run, `replace_ids` defaults to `true` so `::main` lookup works reliably.
 
-### Compiling Starknet Contracts
+### How stdout becomes capturable
 
-Compile a Starknet Contract to a Sierra ContractClass:
-```bash
-cargo run --bin starknet-compile -- --single-file /path/to/input.cairo /path/to/output.json
+`println!` output in Cairo is produced through debug-print hints during execution. To make this observable for browser consumers, the runner now captures that text in-process:
+
+- `CoreHint::DebugPrint` output is still printed, but is also appended to an internal stdout buffer.
+- That buffer is carried through the run result as `RunResultStarknet.stdout`.
+- `cairo-lang-runner-wasm` serializes this value into the JSON response field `stdout`.
+
+This makes stdout deterministic and API-visible without scraping console output.
+
+### Example browser usage
+
+```js
+import initCompiler, { compile } from "./cairo-lang-compiler-wasm/pkg/cairo_lang_compiler_wasm.js";
+import initRunner, { compile_and_run } from "./cairo-lang-runner-wasm/pkg/cairo_lang_runner_wasm.js";
+
+await initCompiler();
+await initRunner();
+
+const compileReq = {
+  crate_name: "app",
+  files: { "lib.cairo": "fn main() -> felt252 { 7 }" },
+  replace_ids: true
+};
+const compileRes = JSON.parse(compile(JSON.stringify(compileReq)));
+
+const runReq = {
+  crate_name: "app",
+  files: { "lib.cairo": "fn main(){ println!(\"Hello World\"); }" },
+  available_gas: 1_000_000
+};
+const runRes = JSON.parse(compile_and_run(JSON.stringify(runReq)));
+console.log({ compileRes, runRes });
 ```
 
-Or specify the contract path if multiple contracts are defined in the same project:
-```bash
-cargo run --bin starknet-compile -- /path/to/input/crate /path/to/output.json --contract-path path::to::contract
-```
+## 2. How Cairo Was Made WASM-Compatible
 
-Compile a Sierra ContractClass to a CASM CompiledClass:
-```bash
-cargo run --bin starknet-sierra-compile -- /path/to/input.json /path/to/output.casm
-```
+The work started by separating what truly needed a full VM from what only needed a compiler pipeline. The compiler itself was already close to wasm-compatibility, but one transitive dependency path pulled in `cairo-vm` through code-size estimation logic. That coupling was broken for `wasm32` builds by target-gating the VM-dependent estimator and using a safe fallback estimator for the browser target.
 
-## Roadmap
+From there, the larger architectural step was to stop treating the filesystem as mandatory input. A new in-memory project path was added so Cairo code and corelib files can be provided as maps of virtual paths to source strings. This made browser execution practical: no local files, no path assumptions, and no host filesystem APIs. With that in place, a dedicated `cairo-lang-compiler-wasm` crate wrapped compilation in a JSON API and embedded `corelib/src/**/*.cairo` at build time, so a browser app can compile immediately without shipping or resolving corelib separately.
 
-The next milestone is to reach feature parity with the old Cairo version.
-You can track the exact progress [here](./docs/FEATURE_PARITY.md).
+Runner support was more involved. Two blockers surfaced immediately on `wasm32-unknown-unknown`: random-number plumbing and `cairo-vm` target configuration. The runner’s direct `rand` usage was adjusted with target-specific dependency settings, and the wasm path now uses deterministic `SmallRng` seeding for the relevant hint flow, avoiding unsupported OS randomness backends. In parallel, `cairo-vm` required a local patch: it forced `no_std` on wasm even when `std` should remain enabled. A vendored `cairo-vm` copy was patched so wasm builds can use the standard-library path, plus a couple of follow-up cleanup fixes needed for strict lint settings.
 
-## Support
+Once those blockers were removed, a second consumer crate, `cairo-lang-runner-wasm`, provided browser-facing compile+run and Sierra-run entry points with explicit JSON diagnostics and error reporting. Smoke tests validated both a simple value-returning Cairo program and a `println!(\"Hello World\")` program through the new API.
 
-- We encourage developers to ask and answer questions on [Stack Overflow](https://stackoverflow.com/questions/tagged/cairo-lang).
-- Contact options are listed on [this GitHub profile](https://github.com/starkware-libs)
-
-## Project assistance
-
-If you want to say **thank you** and/or support active development of Cairo:
-
-- Add a [GitHub Star](https://github.com/starkware-libs/cairo) to the project.
-- Tweet about your Cairo work.
-- Write interesting articles about the project on [Dev.to](https://dev.to/), [Medium](https://medium.com/) or your personal blog.
-
-Together, we can make Cairo **better**!
-
-## Contributing
-
-First off, thanks for taking the time to contribute! Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make will benefit everybody else and are **greatly appreciated**.
-
-Please read [our contribution guidelines](docs/CONTRIBUTING.md), and thank you for being involved!
-
-## Authors & contributors
-
-For a full list of all authors and contributors, see [the contributors page](https://github.com/starkware-libs/cairo/contributors).
-
-## Security
-
-Cairo follows good practices of security, but 100% security cannot be assured.
-Cairo is provided **"as is"** without any **warranty**. Use at your own risk.
-
-_For more information and to report security issues, please refer to our [security documentation](docs/SECURITY.md)._
-
-## License
-
-This project is licensed under the **Apache 2.0** license.
-
-See [LICENSE](LICENSE) for more information.
+The result is a practical two-crate browser integration path: compile-only and compile+run, both in-memory, both corelib-embedded, both validated for `wasm32-unknown-unknown`. The remaining hardening work is mainly productization: publishing strategy, JS package ergonomics, browser demo UX, and deciding whether the temporary vendored `cairo-vm` patch should be upstreamed or replaced by an upstream release.
