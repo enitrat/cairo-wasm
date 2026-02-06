@@ -386,24 +386,29 @@ pub fn init_dev_corelib(db: &mut dyn salsa::Database, core_lib_dir: PathBuf) {
     let core = CrateLongId::core(db).intern(db);
     let root = CrateConfiguration {
         root: Directory::Real(core_lib_dir),
-        settings: CrateSettings {
-            name: None,
-            edition: Edition::V2025_12,
-            version: Version::parse(CORELIB_VERSION).ok(),
-            cfg_set: Default::default(),
-            dependencies: Default::default(),
-            experimental_features: ExperimentalFeaturesConfig {
-                negative_impls: true,
-                associated_item_constraints: true,
-                coupons: true,
-                user_defined_inline_macros: true,
-                repr_ptrs: true,
-            },
-        },
+        settings: dev_corelib_crate_settings(),
         cache_file: None,
     };
     let crate_configs = update_crate_configuration_input_helper(db, core, Some(root));
     set_crate_configs_input(db, Some(crate_configs));
+}
+
+/// Returns the default crate settings used for the corelib in dev and in-memory setups.
+pub fn dev_corelib_crate_settings() -> CrateSettings {
+    CrateSettings {
+        name: None,
+        edition: Edition::V2025_12,
+        version: Version::parse(CORELIB_VERSION).ok(),
+        cfg_set: Default::default(),
+        dependencies: Default::default(),
+        experimental_features: ExperimentalFeaturesConfig {
+            negative_impls: true,
+            associated_item_constraints: true,
+            coupons: true,
+            user_defined_inline_macros: true,
+            repr_ptrs: true,
+        },
+    }
 }
 
 /// Updates crate configuration input for standalone use.

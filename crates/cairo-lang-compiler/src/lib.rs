@@ -30,7 +30,10 @@ use salsa::Database;
 
 use crate::db::RootDatabase;
 use crate::diagnostics::{DiagnosticsError, DiagnosticsReporter};
-use crate::project::{ProjectConfig, get_main_crate_ids_from_project, setup_project};
+use crate::project::{
+    InMemoryProject, ProjectConfig, get_main_crate_ids_from_project, setup_in_memory_project,
+    setup_project,
+};
 
 pub mod db;
 pub mod diagnostics;
@@ -111,6 +114,28 @@ pub fn compile(
     let main_crate_ids = get_main_crate_ids_from_project(&db, &project_config);
 
     compile_prepared_db_program(&db, main_crate_ids, compiler_config)
+}
+
+/// Compiles a Cairo project from in-memory files.
+///
+/// This is intended for environments where host filesystem access is unavailable (e.g. browsers).
+/// `project.main_crate_files` and `project.corelib_files` must both include `lib.cairo`.
+pub fn compile_in_memory_project(
+    project: &InMemoryProject,
+    compiler_config: CompilerConfig<'_>,
+    inlining_strategy: InliningStrategy,
+) -> Result<Program> {
+    let mut db = RootDatabase::builder()
+        .with_optimizations(Optimizations::enabled_with_default_movable_functions(
+            inlining_strategy,
+        ))
+        .build()?;
+    let main_crate_ids = setup_in_memory_project(&mut db, project)?;
+    compile_prepared_db_program(
+        &db,
+        CrateInput::into_crate_ids(&db, main_crate_ids),
+        compiler_config,
+    )
 }
 
 /// Runs Cairo compiler.

@@ -11,11 +11,13 @@ use cairo_lang_lowering::ids::ConcreteFunctionWithBodyId;
 use cairo_lang_lowering::optimizations::config::Optimizations;
 use cairo_lang_lowering::utils::InliningStrategy;
 use cairo_lang_project::ProjectConfig;
+#[cfg(not(target_arch = "wasm32"))]
 use cairo_lang_runnable_utils::builder::RunnableBuilder;
 use cairo_lang_semantic::db::{PluginSuiteInput, init_semantic_group};
 use cairo_lang_semantic::inline_macros::get_default_plugin_suite;
 use cairo_lang_semantic::plugin::PluginSuite;
 use cairo_lang_sierra_generator::db::init_sierra_gen_group;
+#[cfg(not(target_arch = "wasm32"))]
 use cairo_lang_sierra_generator::program_generator::get_dummy_program_for_size_estimation;
 use cairo_lang_utils::CloneableDatabase;
 use salsa::Database;
@@ -24,6 +26,7 @@ use crate::project::update_crate_roots_from_project_config;
 
 /// Estimates the size of a function by compiling it to CASM.
 /// Note that the size is not accurate since we don't use the real costs for the dummy functions.
+#[cfg(not(target_arch = "wasm32"))]
 fn estimate_code_size(
     db: &dyn Database,
     function_id: ConcreteFunctionWithBodyId<'_>,
@@ -63,6 +66,16 @@ fn estimate_code_size(
     // The size of a dummy function is currently 3 felts. call (2) + ret (1).
     const DUMMY_FUNCTION_SIZE: usize = 3;
     Ok((total_size - (n_dummy_functions * DUMMY_FUNCTION_SIZE)).try_into().unwrap_or(0))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn estimate_code_size(
+    _db: &dyn Database,
+    _function_id: ConcreteFunctionWithBodyId<'_>,
+) -> Maybe<isize> {
+    // In wasm builds we intentionally avoid `RunnableBuilder` to keep the compiler independent
+    // from cairo-vm. Using a conservative max size estimation disables aggressive inlining.
+    Ok(isize::MAX)
 }
 
 #[salsa::db]

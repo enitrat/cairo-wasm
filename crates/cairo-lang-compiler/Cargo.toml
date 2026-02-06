@@ -14,7 +14,6 @@ cairo-lang-filesystem = { path = "../cairo-lang-filesystem", version = "=2.15.0"
 cairo-lang-lowering = { path = "../cairo-lang-lowering", version = "=2.15.0" }
 cairo-lang-parser = { path = "../cairo-lang-parser", version = "=2.15.0" }
 cairo-lang-project = { path = "../cairo-lang-project", version = "=2.15.0" }
-cairo-lang-runnable-utils = { path = "../cairo-lang-runnable-utils", version = "=2.15.0" }
 cairo-lang-semantic = { path = "../cairo-lang-semantic", version = "=2.15.0", features = [
   "testing",
 ] }
@@ -28,5 +27,8 @@ salsa.workspace = true
 semver.workspace = true
 smol_str.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cairo-lang-runnable-utils = { path = "../cairo-lang-runnable-utils", version = "=2.15.0" }
 
 [dev-dependencies]
