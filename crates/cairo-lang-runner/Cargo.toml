@@ -26,12 +26,17 @@ keccak.workspace = true
 num-bigint = { workspace = true, default-features = true }
 num-integer.workspace = true
 num-traits = { workspace = true, default-features = true }
-rand.workspace = true
 salsa.workspace = true
 serde.workspace = true
 sha2.workspace = true
 starknet-types-core.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rand.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+rand = { version = "0.9.2", default-features = false, features = ["small_rng"] }
 
 [dev-dependencies]
 cairo-lang-compiler = { path = "../cairo-lang-compiler" }

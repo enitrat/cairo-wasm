@@ -56,6 +56,7 @@ pub struct RunResultStarknet {
     pub gas_counter: Option<Felt252>,
     pub memory: Vec<Option<Felt252>>,
     pub value: RunResultValue,
+    pub stdout: String,
     pub starknet_state: StarknetState,
     pub used_resources: StarknetExecutionResources,
     /// The profiling info of the run, if requested.
@@ -226,6 +227,7 @@ impl SierraCasmRunner {
             gas_counter,
             memory,
             value,
+            stdout: hint_processor.take_stdout(),
             starknet_state: hint_processor.take_starknet_state(),
             used_resources: all_used_resources,
             profiling_info,
@@ -344,6 +346,7 @@ impl SierraCasmRunner {
             no_temporary_segments: true,
             markers: Default::default(),
             panic_traceback: Default::default(),
+            captured_stdout: String::new(),
         };
         Ok((
             hint_processor,

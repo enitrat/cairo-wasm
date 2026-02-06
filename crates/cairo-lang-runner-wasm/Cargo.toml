@@ -1,0 +1,21 @@
+[package]
+name = "cairo-lang-runner-wasm"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license-file.workspace = true
+description = "WASM-friendly Cairo compile+run interface."
+build = "build.rs"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cairo-lang-compiler = { path = "../cairo-lang-compiler", version = "=2.15.0" }
+cairo-lang-lowering = { path = "../cairo-lang-lowering", version = "=2.15.0" }
+cairo-lang-runner = { path = "../cairo-lang-runner", version = "=2.15.0" }
+cairo-lang-sierra = { path = "../cairo-lang-sierra", version = "=2.15.0" }
+cairo-lang-starknet = { path = "../cairo-lang-starknet", version = "=2.15.0" }
+serde.workspace = true
+serde_json.workspace = true
+wasm-bindgen = "0.2.108"

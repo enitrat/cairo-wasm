@@ -3,6 +3,8 @@ use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
 use std::ops::{Shl, Sub};
 use std::sync::Arc;
+#[cfg(target_arch = "wasm32")]
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::vec::IntoIter;
 
 use ark_ff::{BigInteger, PrimeField};
@@ -41,6 +43,8 @@ use num_bigint::{BigInt, BigUint};
 use num_integer::{ExtendedGcd, Integer};
 use num_traits::{Signed, ToPrimitive, Zero};
 use rand::Rng;
+#[cfg(target_arch = "wasm32")]
+use rand::SeedableRng;
 use starknet_types_core::felt::{Felt as Felt252, NonZeroFelt};
 use {ark_secp256k1 as secp256k1, ark_secp256r1 as secp256r1};
 
@@ -108,6 +112,8 @@ pub struct CairoHintProcessor<'a> {
     pub markers: Vec<Vec<Felt252>>,
     /// The traceback set by a panic trace hint call.
     pub panic_traceback: Vec<(Relocatable, Relocatable)>,
+    /// Captured stdout written by debug print hints during execution.
+    pub captured_stdout: String,
 }
 
 pub fn cell_ref_to_relocatable(cell_ref: &CellRef, vm: &VirtualMachine) -> Relocatable {
@@ -434,6 +440,7 @@ impl HintProcessorLogic for CairoHintProcessor<'_> {
                     exec_scopes,
                     core_hint_base,
                     self.no_temporary_segments,
+                    &mut self.captured_stdout,
                 );
             }
             Hint::External(hint) => {
@@ -500,6 +507,10 @@ pub trait StarknetHintProcessor: HintProcessor {
     fn take_starknet_state(&mut self) -> StarknetState;
     /// Take [`StarknetExecutionResources`] out of this hint processor, resetting own state.
     fn take_syscalls_used_resources(&mut self) -> StarknetExecutionResources;
+    /// Take captured stdout out of this hint processor, resetting own state.
+    fn take_stdout(&mut self) -> String {
+        String::new()
+    }
 }
 
 impl StarknetHintProcessor for CairoHintProcessor<'_> {
@@ -509,6 +520,10 @@ impl StarknetHintProcessor for CairoHintProcessor<'_> {
 
     fn take_syscalls_used_resources(&mut self) -> StarknetExecutionResources {
         std::mem::take(&mut self.syscalls_used_resources)
+    }
+
+    fn take_stdout(&mut self) -> String {
+        std::mem::take(&mut self.captured_stdout)
     }
 }
 
@@ -1213,6 +1228,7 @@ impl CairoHintProcessor<'_> {
                 self.starknet_state.clone(),
             )
             .expect("Internal runner error.");
+        self.captured_stdout.push_str(&res.stdout);
         self.syscalls_used_resources += res.used_resources;
         *gas_counter = res.gas_counter.unwrap().to_usize().unwrap();
         match res.value {
@@ -1737,10 +1753,11 @@ pub fn execute_core_hint_base(
     exec_scopes: &mut ExecutionScopes,
     core_hint_base: &cairo_lang_casm::hints::CoreHintBase,
     no_temporary_segments: bool,
+    captured_stdout: &mut String,
 ) -> Result<(), HintError> {
     match core_hint_base {
         cairo_lang_casm::hints::CoreHintBase::Core(core_hint) => {
-            execute_core_hint(vm, exec_scopes, core_hint, no_temporary_segments)
+            execute_core_hint(vm, exec_scopes, core_hint, no_temporary_segments, captured_stdout)
         }
         cairo_lang_casm::hints::CoreHintBase::Deprecated(deprecated_hint) => {
             execute_deprecated_hint(vm, exec_scopes, deprecated_hint)
@@ -1835,6 +1852,7 @@ pub fn execute_core_hint(
     exec_scopes: &mut ExecutionScopes,
     core_hint: &CoreHint,
     no_temporary_segments: bool,
+    captured_stdout: &mut String,
 ) -> Result<(), HintError> {
     match core_hint {
         CoreHint::AllocSegment { dst } => {
@@ -1987,8 +2005,20 @@ pub fn execute_core_hint(
             insert_value_to_cellref!(vm, y, y_value)?;
         }
         CoreHint::RandomEcPoint { x, y } => {
-            let mut rng = rand::rng();
-            random_ec_point(vm, x, y, &mut rng)?;
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let mut rng = rand::rng();
+                random_ec_point(vm, x, y, &mut rng)?;
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                // In wasm32-unknown-unknown we avoid OS RNG backends; a deterministic stream is
+                // sufficient for this hint.
+                static NEXT_SEED: AtomicU64 = AtomicU64::new(1);
+                let seed = NEXT_SEED.fetch_add(1, Ordering::Relaxed);
+                let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
+                random_ec_point(vm, x, y, &mut rng)?;
+            }
         }
         CoreHint::FieldSqrt { val, sqrt } => {
             let val = get_val(vm, val)?;
@@ -2192,7 +2222,9 @@ pub fn execute_core_hint(
             )?;
         }
         CoreHint::DebugPrint { start, end } => {
-            print!("{}", format_for_debug(read_felts(vm, start, end)?.into_iter()));
+            let output = format_for_debug(read_felts(vm, start, end)?.into_iter());
+            print!("{output}");
+            captured_stdout.push_str(&output);
         }
         CoreHint::AllocConstantSize { size, dst } => {
             let object_size = get_val(vm, size)?.to_usize().expect("Object size too large.");

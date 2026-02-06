@@ -54,6 +54,7 @@ members = [
   "crates/bin/starknet-sierra-upgrade-validate",
   "crates/cairo-lang-casm",
   "crates/cairo-lang-compiler",
+  "crates/cairo-lang-compiler-wasm",
   "crates/cairo-lang-debug",
   "crates/cairo-lang-defs",
   "crates/cairo-lang-diagnostics",
@@ -71,6 +72,7 @@ members = [
   "crates/cairo-lang-project",
   "crates/cairo-lang-runnable-utils",
   "crates/cairo-lang-runner",
+  "crates/cairo-lang-runner-wasm",
   "crates/cairo-lang-semantic",
   "crates/cairo-lang-sierra",
   "crates/cairo-lang-sierra-ap-change",
@@ -165,3 +167,6 @@ xshell = "0.2.7"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 openssl = { version = "0.10.73" }
+
+[patch.crates-io]
+cairo-vm = { path = "vendor/cairo-vm-3.1.0-local" }

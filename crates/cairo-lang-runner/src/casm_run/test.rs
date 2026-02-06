@@ -132,6 +132,7 @@ fn test_runner(function: CasmContext, n_returns: usize, expected: &[i128]) {
         no_temporary_segments: true,
         markers: Default::default(),
         panic_traceback: Default::default(),
+        captured_stdout: String::new(),
     };
 
     let RunFunctionResult { ap, memory, .. } =
@@ -163,6 +164,7 @@ fn test_allocate_segment() {
         no_temporary_segments: true,
         markers: Default::default(),
         panic_traceback: Default::default(),
+        captured_stdout: String::new(),
     };
 
     let RunFunctionResult { ap, memory, .. } =

@@ -265,6 +265,7 @@ fn main() -> anyhow::Result<()> {
         no_temporary_segments: false,
         markers: Default::default(),
         panic_traceback: Default::default(),
+        captured_stdout: String::new(),
     };
     let dynamic_layout_params = match args.run.cairo_layout_params_file {
         Some(file) => Some(CairoLayoutParams::from_file(&file)?),

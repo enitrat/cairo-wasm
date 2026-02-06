@@ -516,6 +516,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cairo-lang-compiler-wasm"
+version = "2.15.0"
+dependencies = [
+ "cairo-lang-compiler",
+ "cairo-lang-lowering",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "cairo-lang-debug"
 version = "2.15.0"
 dependencies = [
@@ -852,6 +863,20 @@ dependencies = [
  "test-case",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "cairo-lang-runner-wasm"
+version = "2.15.0"
+dependencies = [
+ "cairo-lang-compiler",
+ "cairo-lang-lowering",
+ "cairo-lang-runner",
+ "cairo-lang-sierra",
+ "cairo-lang-starknet",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1244,8 +1269,6 @@ dependencies = [
 [[package]]
 name = "cairo-vm"
 version = "3.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "182965d2ccbc05674f798b30097854ecf015eed695194a3a5fe9b682c4163b9d"
 dependencies = [
  "anyhow",
  "bincode",
