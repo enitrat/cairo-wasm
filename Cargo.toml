@@ -169,4 +169,4 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 openssl = { version = "0.10.73" }
 
 [patch.crates-io]
-cairo-vm = { path = "vendor/cairo-vm-3.1.0-local" }
+cairo-vm = { git = "https://github.com/lambdaclass/cairo-vm", rev = "ce2774772bfc431796299ec321e1842af9eece19" }

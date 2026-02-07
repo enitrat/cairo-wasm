@@ -337,17 +337,16 @@ available in `alloc` or `core` but not re-exported identically. The upstream
 assumption was that WASM means embedded/no-std, but browser WASM has a full
 `std` available.
 
-The fix was to vendor `cairo-vm 3.1.0` locally under `vendor/cairo-vm-3.1.0-local`
-and patch the crate-level configuration so `no_std` only activates when the
-`std` feature is explicitly disabled. A workspace `[patch.crates-io]` override
-redirects all `cairo-vm` imports to the vendored copy. This is the least
-invasive change — no API modifications, no fork, just a configuration fix.
+The fix is now upstream in `lambdaclass/cairo-vm` (PR #2315), but at the time of
+writing the latest crates.io release is still `3.1.0`. To avoid carrying a
+stale local fork, the workspace uses a temporary `[patch.crates-io]` override
+that pins `cairo-vm` to the merged upstream commit
+`ce2774772bfc431796299ec321e1842af9eece19`.
 
-The tradeoff: the project now carries a vendored copy of `cairo-vm`. This should
-be temporary. The proper resolution is either an upstream release that supports
-`wasm32` with `std`, or a minimal fork that tracks upstream releases with the
-patch applied. Until then, the vendor directory works and is straightforward to
-update.
+The tradeoff: builds currently depend on a pinned git revision instead of a
+crates.io release. This should be temporary; once a release that includes PR
+#2315 is published, the patch can be removed and dependency resolution can go
+back to pure registry versions.
 
 ### Stdout — Making println! Observable
 
@@ -374,5 +373,6 @@ productization:
     via `wasm-pack` or distribute pre-built artifacts.
 -   **JS ergonomics** — wrapping the raw JSON API in a typed TypeScript SDK.
 -   **Browser demo** — a minimal playground that exercises compile and run.
--   **Vendored cairo-vm** — replacing the local patch with an upstream fix or a
-    maintained fork.
+-   **Pinned cairo-vm revision** — replacing the temporary git pin with the
+    first crates.io release that includes the WASM `std` compatibility fix
+    (PR #2315).
