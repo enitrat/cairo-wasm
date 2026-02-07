@@ -299,13 +299,11 @@ self-contained — a single `.wasm` file carries the full Cairo standard library
 ### Making the Runner Work in WASM
 
 The runner needed one adaptation for `wasm32-unknown-unknown`: randomness.
-`cairo-lang-runner` used `rand` with OS-backed entropy for the `RandomEcPoint`
-hint. On WASM, the `getrandom` crate fails because there is no OS randomness
-source. The fix is target-specific: on native builds, the runner still uses OS
-randomness through the workspace `rand` configuration. On WASM, it uses
-`SmallRng` seeded from a deterministic atomic counter. The output is not
-cryptographically random, but the `RandomEcPoint` hint only needs structural
-validity — it generates points for testing, not for key material.
+`cairo-lang-runner` uses `rand` with OS-backed entropy for the `RandomEcPoint`
+hint. On WASM, the `getrandom` crate needs an explicit backend to reach the
+browser's `crypto.getRandomValues()` API. Enabling the `wasm_js` feature on
+`getrandom` provides this backend, so the runner uses the same `rand::rng()`
+call on both native and WASM targets with no platform-specific code paths.
 
 ### Stdout — Making println! Observable
 

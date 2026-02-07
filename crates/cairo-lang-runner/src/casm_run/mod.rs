@@ -3,8 +3,6 @@ use std::borrow::Cow;
 use std::collections::{HashMap, VecDeque};
 use std::ops::{Shl, Sub};
 use std::sync::Arc;
-#[cfg(target_arch = "wasm32")]
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::vec::IntoIter;
 
 use ark_ff::{BigInteger, PrimeField};
@@ -43,8 +41,6 @@ use num_bigint::{BigInt, BigUint};
 use num_integer::{ExtendedGcd, Integer};
 use num_traits::{Signed, ToPrimitive, Zero};
 use rand::Rng;
-#[cfg(target_arch = "wasm32")]
-use rand::SeedableRng;
 use starknet_types_core::felt::{Felt as Felt252, NonZeroFelt};
 use {ark_secp256k1 as secp256k1, ark_secp256r1 as secp256r1};
 
@@ -2005,20 +2001,8 @@ pub fn execute_core_hint(
             insert_value_to_cellref!(vm, y, y_value)?;
         }
         CoreHint::RandomEcPoint { x, y } => {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                let mut rng = rand::rng();
-                random_ec_point(vm, x, y, &mut rng)?;
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                // In wasm32-unknown-unknown we avoid OS RNG backends; a deterministic stream is
-                // sufficient for this hint.
-                static NEXT_SEED: AtomicU64 = AtomicU64::new(1);
-                let seed = NEXT_SEED.fetch_add(1, Ordering::Relaxed);
-                let mut rng = rand::rngs::SmallRng::seed_from_u64(seed);
-                random_ec_point(vm, x, y, &mut rng)?;
-            }
+            let mut rng = rand::rng();
+            random_ec_point(vm, x, y, &mut rng)?;
         }
         CoreHint::FieldSqrt { val, sqrt } => {
             let val = get_val(vm, val)?;

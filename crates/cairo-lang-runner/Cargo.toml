@@ -32,11 +32,11 @@ sha2.workspace = true
 starknet-types-core.workspace = true
 thiserror.workspace = true
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 rand.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-rand = { version = "0.9.2", default-features = false, features = ["small_rng"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom_02 = { package = "getrandom", version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 cairo-lang-compiler = { path = "../cairo-lang-compiler" }
