@@ -1,147 +1,378 @@
-# Cairo WASM Integration Guide
+# Cairo WASM
 
-## 1. Consumer-Facing Integration Instructions
+Compile and run Cairo programs in the browser. Two crates expose the Cairo
+compiler and runner as WebAssembly modules with JSON APIs, so a web application
+can compile Cairo source to Sierra and execute it without a backend server.
 
-This branch exposes two browser-oriented WASM crates:
+| Crate                      | Purpose                                           |
+| -------------------------- | ------------------------------------------------- |
+| `cairo-lang-compiler-wasm` | Compile Cairo source to Sierra                    |
+| `cairo-lang-runner-wasm`   | Compile and run Cairo, or run pre-compiled Sierra |
 
-- `crates/cairo-lang-compiler-wasm`: compile Cairo source to Sierra in-memory.
-- `crates/cairo-lang-runner-wasm`: compile and run Cairo source (or run Sierra) in-memory.
+Both crates embed the full Cairo corelib at build time. A browser app ships
+self-contained — no filesystem access, no corelib resolution, no external
+dependencies at runtime.
 
-### Build the WASM packages
+---
+
+## Part 1 — Integration Guide
+
+### Building the WASM Packages
 
 From the repository root:
 
 ```bash
 wasm-pack build crates/cairo-lang-compiler-wasm --target web --release
-wasm-pack build crates/cairo-lang-runner-wasm --target web --release
+wasm-pack build crates/cairo-lang-runner-wasm  --target web --release
 ```
 
-This generates JS/WASM artifacts under:
+This produces JS/WASM artifacts under each crate's `pkg/` directory:
 
-- `crates/cairo-lang-compiler-wasm/pkg`
-- `crates/cairo-lang-runner-wasm/pkg`
+```
+crates/cairo-lang-compiler-wasm/pkg/
+crates/cairo-lang-runner-wasm/pkg/
+```
 
-### API surface
+Import the generated ES modules directly into your application.
 
-`cairo-lang-compiler-wasm` exports:
+### Exported Functions
 
-- `compile(requestJson: string): string`
-- `embedded_corelib_manifest(): string`
+**Compiler crate** (`cairo-lang-compiler-wasm`):
 
-`cairo-lang-runner-wasm` exports:
+| Function                               | Description                      |
+| -------------------------------------- | -------------------------------- |
+| `compile(requestJson: string): string` | Compile Cairo source to Sierra   |
+| `embedded_corelib_manifest(): string`  | List embedded corelib file paths |
 
-- `compile_and_run(requestJson: string): string`
-- `run_sierra(requestJson: string): string`
-- `embedded_corelib_manifest(): string`
+**Runner crate** (`cairo-lang-runner-wasm`):
 
-All functions accept JSON strings and return JSON strings.
+| Function                                       | Description                           |
+| ---------------------------------------------- | ------------------------------------- |
+| `compile_and_run(requestJson: string): string` | Compile Cairo source and execute it   |
+| `run_sierra(requestJson: string): string`      | Execute a pre-compiled Sierra program |
+| `embedded_corelib_manifest(): string`          | List embedded corelib file paths      |
 
-### Request/response schema (compiler)
+Every function accepts a JSON string and returns a JSON string.
 
-Compile request:
+---
+
+### Compile API
+
+#### Request
 
 ```json
 {
-  "crate_name": "app",
-  "files": {
-    "lib.cairo": "fn main() -> felt252 { 7 }"
-  },
-  "corelib_files": null,
-  "replace_ids": true,
-  "inlining_strategy": "default"
+    "crate_name": "app",
+    "files": {
+        "lib.cairo": "fn main() -> felt252 { 7 }"
+    },
+    "replace_ids": true,
+    "inlining_strategy": "default"
 }
 ```
 
-Compile response:
+| Field               | Type           | Required | Default          | Description                                                     |
+| ------------------- | -------------- | -------- | ---------------- | --------------------------------------------------------------- |
+| `crate_name`        | string         | yes      | —                | Name for the virtual crate                                      |
+| `files`             | object         | yes      | —                | Map of relative paths to Cairo source. Must include `lib.cairo` |
+| `corelib_files`     | object \| null | no       | embedded corelib | Override the corelib with custom files                          |
+| `replace_ids`       | bool           | no       | `false`          | Replace Sierra identifiers with human-readable names            |
+| `inlining_strategy` | string         | no       | `"default"`      | `"default"` or `"avoid"`                                        |
+
+#### Response
 
 ```json
 {
-  "success": true,
-  "sierra": "...",
-  "diagnostics": "",
-  "error": null
+    "success": true,
+    "sierra": "type felt252 = felt252 ...",
+    "diagnostics": "",
+    "error": null
 }
 ```
 
-### Request/response schema (runner)
+| Field         | Type           | Description                                                    |
+| ------------- | -------------- | -------------------------------------------------------------- |
+| `success`     | bool           | Whether compilation succeeded                                  |
+| `sierra`      | string \| null | The Sierra program text on success, `null` on failure          |
+| `diagnostics` | string         | Compiler warnings and notes (may be non-empty even on success) |
+| `error`       | string \| null | Error description on failure                                   |
 
-Compile+run request:
+---
+
+### Compile-and-Run API
+
+#### Request
 
 ```json
 {
-  "crate_name": "app",
-  "files": {
-    "lib.cairo": "fn main(){ println!(\"Hello World\"); }"
-  },
-  "available_gas": 1000000,
-  "function": "::main"
+    "crate_name": "app",
+    "files": {
+        "lib.cairo": "fn main() { println!(\"Hello World\"); }"
+    },
+    "available_gas": 1000000,
+    "function": "::main"
 }
 ```
 
-Run response:
+| Field               | Type           | Required    | Default          | Description                                                                   |
+| ------------------- | -------------- | ----------- | ---------------- | ----------------------------------------------------------------------------- |
+| `crate_name`        | string         | yes         | —                | Name for the virtual crate                                                    |
+| `files`             | object         | yes         | —                | Map of relative paths to Cairo source. Must include `lib.cairo`               |
+| `corelib_files`     | object \| null | no          | embedded corelib | Override the corelib                                                          |
+| `replace_ids`       | bool           | no          | `true`           | Replace Sierra identifiers (defaults to `true` here so `::main` lookup works) |
+| `inlining_strategy` | string         | no          | `"default"`      | `"default"` or `"avoid"`                                                      |
+| `available_gas`     | number \| null | conditional | —                | Gas budget. Required when the program uses gas accounting                     |
+| `function`          | string         | no          | `"::main"`       | Fully-qualified function name to execute                                      |
+
+#### Response
 
 ```json
 {
-  "success": true,
-  "panicked": false,
-  "values": [],
-  "stdout": "Hello World\n",
-  "gas_counter": "999000",
-  "diagnostics": "",
-  "error": null
+    "success": true,
+    "panicked": false,
+    "values": ["7"],
+    "stdout": "",
+    "gas_counter": "999000",
+    "diagnostics": "",
+    "error": null
 }
 ```
 
-Notes:
+| Field         | Type           | Description                                                                      |
+| ------------- | -------------- | -------------------------------------------------------------------------------- |
+| `success`     | bool           | `true` when the program runs to completion without panicking                     |
+| `panicked`    | bool           | Whether the Cairo program panicked                                               |
+| `values`      | string[]       | Return values as stringified felts                                               |
+| `stdout`      | string         | Captured output from `println!` calls                                            |
+| `gas_counter` | string \| null | Remaining gas after execution                                                    |
+| `diagnostics` | string         | Compiler diagnostics (empty when using `run_sierra`)                             |
+| `error`       | string \| null | Infrastructure error — compilation failure, missing function, runner setup error |
 
-- `available_gas` is required for programs that use gas accounting.
-- `function` defaults to `::main`.
-- `corelib_files` is optional. If omitted, embedded corelib files are used.
-- In runner compile+run, `replace_ids` defaults to `true` so `::main` lookup works reliably.
+---
 
-### How stdout becomes capturable
+### Run-Sierra API
 
-`println!` output in Cairo is produced through debug-print hints during execution. To make this observable for browser consumers, the runner now captures that text in-process:
+The `run_sierra` endpoint accepts a pre-compiled Sierra program directly,
+skipping the compilation step. Useful when the frontend caches compiled output
+or receives Sierra from an external source.
 
-- `CoreHint::DebugPrint` output is still printed, but is also appended to an internal stdout buffer.
-- That buffer is carried through the run result as `RunResultStarknet.stdout`.
-- `cairo-lang-runner-wasm` serializes this value into the JSON response field `stdout`.
+#### Request
 
-This makes stdout deterministic and API-visible without scraping console output.
+```json
+{
+    "sierra": "type felt252 = felt252 ...",
+    "available_gas": 1000000,
+    "function": "::main"
+}
+```
 
-### Example browser usage
+| Field           | Type           | Required    | Default    | Description                                   |
+| --------------- | -------------- | ----------- | ---------- | --------------------------------------------- |
+| `sierra`        | string         | yes         | —          | Sierra program text                           |
+| `available_gas` | number \| null | conditional | —          | Gas budget (required if the program uses gas) |
+| `function`      | string         | no          | `"::main"` | Function to execute                           |
+
+The response schema is identical to the compile-and-run response above.
+
+---
+
+### Stdout Capture
+
+`println!` in Cairo compiles down to `CoreHint::DebugPrint` hints executed
+during VM interpretation. In a native terminal, these hints call `print!` and
+the output goes to the process stdout — useless in a browser.
+
+The WASM runner intercepts `DebugPrint` hints and appends their output to an
+internal buffer while still calling the original `print!` path. That buffer
+surfaces as the `stdout` field in the JSON response. This makes program output
+deterministic and API-visible without relying on console scraping.
+
+A program that does not call `println!` returns `stdout: ""`.
+
+---
+
+### Browser Example
 
 ```js
-import initCompiler, { compile } from "./cairo-lang-compiler-wasm/pkg/cairo_lang_compiler_wasm.js";
-import initRunner, { compile_and_run } from "./cairo-lang-runner-wasm/pkg/cairo_lang_runner_wasm.js";
+import initCompiler, { compile } from "./pkg-compiler/cairo_lang_compiler_wasm.js";
+import initRunner, { compile_and_run } from "./pkg-runner/cairo_lang_runner_wasm.js";
 
+// Initialize WASM modules
 await initCompiler();
 await initRunner();
 
-const compileReq = {
-  crate_name: "app",
-  files: { "lib.cairo": "fn main() -> felt252 { 7 }" },
-  replace_ids: true
-};
-const compileRes = JSON.parse(compile(JSON.stringify(compileReq)));
+// Compile to Sierra
+const compileResult = JSON.parse(
+    compile(
+        JSON.stringify({
+            crate_name: "app",
+            files: { "lib.cairo": "fn main() -> felt252 { 42 }" },
+            replace_ids: true,
+        })
+    )
+);
 
-const runReq = {
-  crate_name: "app",
-  files: { "lib.cairo": "fn main(){ println!(\"Hello World\"); }" },
-  available_gas: 1_000_000
-};
-const runRes = JSON.parse(compile_and_run(JSON.stringify(runReq)));
-console.log({ compileRes, runRes });
+if (compileResult.success) {
+    console.log("Sierra:", compileResult.sierra);
+}
+
+// Compile and run
+const runResult = JSON.parse(
+    compile_and_run(
+        JSON.stringify({
+            crate_name: "app",
+            files: { "lib.cairo": 'fn main() { println!("Hello from Cairo"); }' },
+            available_gas: 1_000_000,
+        })
+    )
+);
+
+if (runResult.success) {
+    console.log("stdout:", runResult.stdout); // "Hello from Cairo\n"
+    console.log("values:", runResult.values);
+}
 ```
 
-## 2. How Cairo Was Made WASM-Compatible
+### The `#[executable]` Attribute
 
-The work started by separating what truly needed a full VM from what only needed a compiler pipeline. The compiler itself was already close to wasm-compatibility, but one transitive dependency path pulled in `cairo-vm` through code-size estimation logic. That coupling was broken for `wasm32` builds by target-gating the VM-dependent estimator and using a safe fallback estimator for the browser target.
+Programs annotated with `#[executable]` work through both the compile and
+compile-and-run paths. The WASM compiler loads Cairo's `executable_plugin_suite`
+so entry-point detection and code generation behave identically to the native
+CLI. No special configuration is needed — use `#[executable]` as you normally
+would:
 
-From there, the larger architectural step was to stop treating the filesystem as mandatory input. A new in-memory project path was added so Cairo code and corelib files can be provided as maps of virtual paths to source strings. This made browser execution practical: no local files, no path assumptions, and no host filesystem APIs. With that in place, a dedicated `cairo-lang-compiler-wasm` crate wrapped compilation in a JSON API and embedded `corelib/src/**/*.cairo` at build time, so a browser app can compile immediately without shipping or resolving corelib separately.
+```json
+{
+    "crate_name": "app",
+    "files": {
+        "lib.cairo": "#[executable]\nfn main() { println!(\"Hello executable\"); }"
+    },
+    "available_gas": 1000000
+}
+```
 
-Runner support was more involved. Two blockers surfaced immediately on `wasm32-unknown-unknown`: random-number plumbing and `cairo-vm` target configuration. The runner’s direct `rand` usage was adjusted with target-specific dependency settings, and the wasm path now uses deterministic `SmallRng` seeding for the relevant hint flow, avoiding unsupported OS randomness backends. In parallel, `cairo-vm` required a local patch: it forced `no_std` on wasm even when `std` should remain enabled. A vendored `cairo-vm` copy was patched so wasm builds can use the standard-library path, plus a couple of follow-up cleanup fixes needed for strict lint settings.
+---
 
-Once those blockers were removed, a second consumer crate, `cairo-lang-runner-wasm`, provided browser-facing compile+run and Sierra-run entry points with explicit JSON diagnostics and error reporting. Smoke tests validated both a simple value-returning Cairo program and a `println!(\"Hello World\")` program through the new API.
+## Part 2 — How Cairo Was Made WASM-Compatible
 
-The result is a practical two-crate browser integration path: compile-only and compile+run, both in-memory, both corelib-embedded, both validated for `wasm32-unknown-unknown`. The remaining hardening work is mainly productization: publishing strategy, JS package ergonomics, browser demo UX, and deciding whether the temporary vendored `cairo-vm` patch should be upstreamed or replaced by an upstream release.
+### The Starting Point
+
+The Cairo compiler was never designed for the browser. It assumes a local
+filesystem, links against a VM for code-size estimation, and its runner depends
+on OS-level randomness. Making it work as WebAssembly meant identifying every
+assumption that breaks under `wasm32-unknown-unknown` and finding the narrowest
+change that removes the assumption without disrupting native builds.
+
+The work divided naturally into three phases: decoupling the compiler from the
+VM, replacing the filesystem with an in-memory project model, and making the
+runner's VM execution work without OS facilities.
+
+### Decoupling the Compiler from cairo-vm
+
+The compiler pipeline itself — parsing, lowering, Sierra generation — already
+compiled for `wasm32-unknown-unknown`. The blocker was a single transitive
+dependency: `cairo-lang-runnable-utils`, pulled in solely for CASM-based code
+size estimation. That crate depends on `cairo-vm`, which at the time did not
+compile for WASM.
+
+Rather than making the entire VM WASM-safe just for one estimation function, the
+dependency was target-gated. On native builds, the compiler still uses the
+precise CASM-based estimator. On `wasm32`, it falls back to a conservative
+`isize::MAX` estimate. This is safe because code-size estimation only affects
+contract-size validation — irrelevant in a browser playground context where the
+goal is to compile and inspect Sierra, not deploy to a chain.
+
+The tradeoff is explicit: browser compilation cannot validate contract size
+limits. This is acceptable because the WASM crates target interactive
+development, not production deployment.
+
+### The In-Memory Project Model
+
+Cairo's compiler expected to read source files from disk. The filesystem layer
+already supported virtual files and crates, but no API existed to configure an
+entire project — main crate plus corelib — from in-memory maps.
+
+The new `InMemoryProject` struct wraps this:
+
+```rust
+pub struct InMemoryProject {
+    pub main_crate_name: String,
+    pub main_crate_files: BTreeMap<String, String>,
+    pub corelib_files: BTreeMap<String, String>,
+    pub main_crate_settings: Option<CrateSettings>,
+}
+```
+
+A caller provides a crate name, a map of relative paths to source strings, and
+optionally custom corelib files. The `compile_in_memory_project` function sets
+up virtual directories, registers the crate and corelib in the compiler
+database, and runs the standard compilation pipeline. No paths touch the host
+filesystem.
+
+The corelib itself is embedded at build time. A `build.rs` script walks
+`corelib/src/**/*.cairo` and generates a static array of `(path, content)`
+pairs compiled into the WASM binary. When a request omits `corelib_files`, the
+embedded copy is used automatically. This makes the WASM module entirely
+self-contained — a single `.wasm` file carries the full Cairo standard library.
+
+### Making the Runner Work in WASM
+
+The runner was harder. Two independent blockers surfaced when targeting
+`wasm32-unknown-unknown`:
+
+**The randomness problem.** `cairo-lang-runner` used `rand` with OS-backed
+entropy for the `RandomEcPoint` hint. On WASM, the `getrandom` crate fails
+because there is no OS randomness source (unless targeting `wasm32-unknown-unknown`
+with the `wasm_js` backend, which adds a JavaScript dependency). The fix was
+target-specific: on native builds, the runner still uses OS randomness through
+the workspace `rand` configuration. On WASM, it uses `SmallRng` seeded from a
+deterministic atomic counter. The output is not cryptographically random, but
+the `RandomEcPoint` hint only needs structural validity — it generates points
+for testing, not for key material.
+
+**The cairo-vm problem.** `cairo-vm 3.1.0` forced `no_std` mode on all WASM
+targets via a crate-level `cfg` attribute. This broke compilation because the VM
+makes extensive use of `std` types (`HashMap`, `Vec`, `io::Write`) that are
+available in `alloc` or `core` but not re-exported identically. The upstream
+assumption was that WASM means embedded/no-std, but browser WASM has a full
+`std` available.
+
+The fix was to vendor `cairo-vm 3.1.0` locally under `vendor/cairo-vm-3.1.0-local`
+and patch the crate-level configuration so `no_std` only activates when the
+`std` feature is explicitly disabled. A workspace `[patch.crates-io]` override
+redirects all `cairo-vm` imports to the vendored copy. This is the least
+invasive change — no API modifications, no fork, just a configuration fix.
+
+The tradeoff: the project now carries a vendored copy of `cairo-vm`. This should
+be temporary. The proper resolution is either an upstream release that supports
+`wasm32` with `std`, or a minimal fork that tracks upstream releases with the
+patch applied. Until then, the vendor directory works and is straightforward to
+update.
+
+### Stdout — Making println! Observable
+
+In the native runner, `println!` output flows through `CoreHint::DebugPrint`,
+which calls `print!` and writes to the process stdout. In the browser, there is
+no process stdout. Even if `console.log` captured it, the output would be
+interleaved with other messages and impossible to attribute to a specific
+program run.
+
+The solution adds a capture buffer to `CairoHintProcessor`. When processing
+`DebugPrint` hints, the handler appends the formatted text to an internal
+`String` buffer in addition to calling the original `print!`. After execution
+completes, this buffer is carried through `RunResultStarknet.stdout` and
+serialized into the JSON response. The existing native behavior is preserved —
+`print!` still fires — but the output is now also available programmatically.
+
+### What Remains
+
+The current implementation is validated locally: unit tests pass on the host,
+and both WASM crates compile for `wasm32-unknown-unknown`. The open work is
+productization:
+
+-   **Publishing strategy** — deciding whether to publish the WASM crates to npm
+    via `wasm-pack` or distribute pre-built artifacts.
+-   **JS ergonomics** — wrapping the raw JSON API in a typed TypeScript SDK.
+-   **Browser demo** — a minimal playground that exercises compile and run.
+-   **Vendored cairo-vm** — replacing the local patch with an upstream fix or a
+    maintained fork.
