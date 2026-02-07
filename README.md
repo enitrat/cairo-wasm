@@ -258,33 +258,14 @@ would:
 ### The Starting Point
 
 The Cairo compiler was never designed for the browser. It assumes a local
-filesystem, links against a VM for code-size estimation, and its runner depends
-on OS-level randomness. Making it work as WebAssembly meant identifying every
-assumption that breaks under `wasm32-unknown-unknown` and finding the narrowest
-change that removes the assumption without disrupting native builds.
+filesystem and its runner depends on OS-level randomness. Making it work as
+WebAssembly meant identifying every assumption that breaks under
+`wasm32-unknown-unknown` and finding the narrowest change that removes the
+assumption without disrupting native builds.
 
-The work divided naturally into three phases: decoupling the compiler from the
-VM, replacing the filesystem with an in-memory project model, and making the
-runner's VM execution work without OS facilities.
-
-### Decoupling the Compiler from cairo-vm
-
-The compiler pipeline itself — parsing, lowering, Sierra generation — already
-compiled for `wasm32-unknown-unknown`. The blocker was a single transitive
-dependency: `cairo-lang-runnable-utils`, pulled in solely for CASM-based code
-size estimation. That crate depends on `cairo-vm`, which at the time did not
-compile for WASM.
-
-Rather than making the entire VM WASM-safe just for one estimation function, the
-dependency was target-gated. On native builds, the compiler still uses the
-precise CASM-based estimator. On `wasm32`, it falls back to a conservative
-`isize::MAX` estimate. This is safe because code-size estimation only affects
-contract-size validation — irrelevant in a browser playground context where the
-goal is to compile and inspect Sierra, not deploy to a chain.
-
-The tradeoff is explicit: browser compilation cannot validate contract size
-limits. This is acceptable because the WASM crates target interactive
-development, not production deployment.
+The work divided into three areas: replacing the filesystem with an in-memory
+project model, making the runner's VM execution work without OS facilities, and
+making `println!` output observable through the API.
 
 ### The In-Memory Project Model
 
@@ -317,36 +298,14 @@ self-contained — a single `.wasm` file carries the full Cairo standard library
 
 ### Making the Runner Work in WASM
 
-The runner was harder. Two independent blockers surfaced when targeting
-`wasm32-unknown-unknown`:
-
-**The randomness problem.** `cairo-lang-runner` used `rand` with OS-backed
-entropy for the `RandomEcPoint` hint. On WASM, the `getrandom` crate fails
-because there is no OS randomness source (unless targeting `wasm32-unknown-unknown`
-with the `wasm_js` backend, which adds a JavaScript dependency). The fix was
-target-specific: on native builds, the runner still uses OS randomness through
-the workspace `rand` configuration. On WASM, it uses `SmallRng` seeded from a
-deterministic atomic counter. The output is not cryptographically random, but
-the `RandomEcPoint` hint only needs structural validity — it generates points
-for testing, not for key material.
-
-**The cairo-vm problem.** `cairo-vm 3.1.0` forced `no_std` mode on all WASM
-targets via a crate-level `cfg` attribute. This broke compilation because the VM
-makes extensive use of `std` types (`HashMap`, `Vec`, `io::Write`) that are
-available in `alloc` or `core` but not re-exported identically. The upstream
-assumption was that WASM means embedded/no-std, but browser WASM has a full
-`std` available.
-
-The fix is now upstream in `lambdaclass/cairo-vm` (PR #2315), but at the time of
-writing the latest crates.io release is still `3.1.0`. To avoid carrying a
-stale local fork, the workspace uses a temporary `[patch.crates-io]` override
-that pins `cairo-vm` to the merged upstream commit
-`ce2774772bfc431796299ec321e1842af9eece19`.
-
-The tradeoff: builds currently depend on a pinned git revision instead of a
-crates.io release. This should be temporary; once a release that includes PR
-#2315 is published, the patch can be removed and dependency resolution can go
-back to pure registry versions.
+The runner needed one adaptation for `wasm32-unknown-unknown`: randomness.
+`cairo-lang-runner` used `rand` with OS-backed entropy for the `RandomEcPoint`
+hint. On WASM, the `getrandom` crate fails because there is no OS randomness
+source. The fix is target-specific: on native builds, the runner still uses OS
+randomness through the workspace `rand` configuration. On WASM, it uses
+`SmallRng` seeded from a deterministic atomic counter. The output is not
+cryptographically random, but the `RandomEcPoint` hint only needs structural
+validity — it generates points for testing, not for key material.
 
 ### Stdout — Making println! Observable
 
@@ -373,6 +332,3 @@ productization:
     via `wasm-pack` or distribute pre-built artifacts.
 -   **JS ergonomics** — wrapping the raw JSON API in a typed TypeScript SDK.
 -   **Browser demo** — a minimal playground that exercises compile and run.
--   **Pinned cairo-vm revision** — replacing the temporary git pin with the
-    first crates.io release that includes the WASM `std` compatibility fix
-    (PR #2315).
