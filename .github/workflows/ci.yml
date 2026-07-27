@@ -20,6 +20,26 @@ jobs:
       - run: |
           cd ensure-no_std && cargo build
 
+  wasm-crates:
+    # cairo-vm dropped its own wasm CI in 3.2.0 (lambdaclass/cairo-vm#2328), so wasm32
+    # compatibility of the dependency tree is only verified here. Keep this job green
+    # before bumping cairo-vm, rand, or getrandom.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Build wasm crates for wasm32-unknown-unknown
+        run: |
+          cargo build --profile=ci-dev --target wasm32-unknown-unknown \
+            -p cairo-lang-compiler-wasm -p cairo-lang-runner-wasm
+      - name: Run wasm crate tests on the host target
+        run: |
+          cargo test --profile=ci-dev \
+            -p cairo-lang-compiler-wasm -p cairo-lang-runner-wasm
+
   syntax-codegen-test:
     runs-on: ubuntu-latest
     steps:
