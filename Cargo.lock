@@ -913,7 +913,6 @@ dependencies = [
  "cairo-lang-lowering",
  "cairo-lang-runner",
  "cairo-lang-sierra",
- "cairo-lang-starknet",
  "cairo-vm",
  "getrandom 0.4.3",
  "serde",

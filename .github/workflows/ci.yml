@@ -35,10 +35,6 @@ jobs:
         run: |
           cargo build --profile=ci-dev --target wasm32-unknown-unknown \
             -p cairo-lang-compiler-wasm -p cairo-lang-runner-wasm
-      - name: Run wasm crate tests on the host target
-        run: |
-          cargo test --profile=ci-dev \
-            -p cairo-lang-compiler-wasm -p cairo-lang-runner-wasm
 
   syntax-codegen-test:
     runs-on: ubuntu-latest
@@ -60,6 +56,7 @@ jobs:
           - cairo-lang-casm --features=serde,parity-scale-codec,schemars
           - cairo-lang-casm --no-default-features --features=serde,parity-scale-codec
           - cairo-lang-compiler
+          - cairo-lang-compiler-wasm
           - cairo-lang-debug
           - cairo-lang-defs
           - cairo-lang-diagnostics
@@ -78,6 +75,7 @@ jobs:
           - cairo-lang-project
           - cairo-lang-runnable-utils
           - cairo-lang-runner
+          - cairo-lang-runner-wasm
           - cairo-lang-semantic
           - cairo-lang-sierra
           - cairo-lang-sierra-ap-change
